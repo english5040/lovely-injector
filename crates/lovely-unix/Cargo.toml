@@ -8,7 +8,8 @@ name = "lovely"
 crate-type = ["cdylib"]
 
 [dependencies]
-lovely-core = { version ="0.7.1", path = "../lovely-core" }
+lovely-core = { version = "0.7.1", path = "../lovely-core" }
+fishhook = { version = "0.1.0", path = "../fishhook-rs" }
 
 once_cell = "1.19.0"
 ctor = "0.2.7"

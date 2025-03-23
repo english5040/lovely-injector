@@ -1,0 +1,3 @@
+[submodule "crates/fishhook-rs/fishhook"]
+	path = crates/fishhook-rs/fishhook
+	url = git@github.com:facebook/fishhook.git
