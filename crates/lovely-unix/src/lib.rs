@@ -1,20 +1,23 @@
+#![allow(non_upper_case_globals)]
+#![allow(non_snake_case)]
+
 use lovely_core::log::*;
-use lovely_core::sys::{LuaState, LUA_LIB};
+use lovely_core::sys::LuaState;
+use std::ffi::c_void;
+use std::ptr;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::{env, mem, panic, ptr::null};
 
 use lovely_core::Lovely;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::OnceCell;
 
 static RUNTIME: OnceCell<Lovely> = OnceCell::new();
 
-static RECALL: Lazy<
-    unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32,
-> = Lazy::new(|| unsafe {
-    mem::transmute(fishhook::rebind_symbol(
-        c"luaL_loadbufferx",
-        luaL_loadbufferx_new as *const (),
-    ))
-});
+static luaL_loadbufferx_old_ATOMIC: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+pub fn get_luaL_loadbufferx_old(
+) -> unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32 {
+    unsafe { mem::transmute(luaL_loadbufferx_old_ATOMIC.load(Ordering::Relaxed)) }
+}
 
 #[allow(non_snake_case)]
 unsafe extern "C" fn luaL_loadbuffer_new(
@@ -48,10 +51,26 @@ unsafe fn construct() {
     let args: Vec<_> = env::args().collect();
     let dump_all = args.contains(&"--dump-all".to_string());
 
-    let _ = fishhook::rebind_symbol(c"luaL_loadbuffer", luaL_loadbuffer_new as *const ());
+    fishhook::rebind_symbol(
+        c"luaL_loadbuffer",
+        luaL_loadbuffer_new as *const c_void,
+        None,
+    );
+    fishhook::rebind_symbol(
+        c"luaL_loadbufferx",
+        luaL_loadbufferx_new as *const c_void,
+        Some(&luaL_loadbufferx_old_ATOMIC),
+    );
 
-    let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), dump_all);
+    eprintln!("get_luaL_loadbufferx_old: {:?}", get_luaL_loadbufferx_old());
 
+    let rt = Lovely::init(
+        &|a, b, c, d, e| {
+            eprintln!("get_luaL_loadbufferx_old: {:?}", get_luaL_loadbufferx_old());
+            get_luaL_loadbufferx_old()(a, b, c, d, e)
+        },
+        dump_all,
+    );
     RUNTIME
         .set(rt)
         .unwrap_or_else(|_| panic!("Failed to instantiate runtime."));
